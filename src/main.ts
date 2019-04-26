@@ -1,14 +1,16 @@
 import * as path from 'path';
 import * as express from 'express';
 import * as morgan from 'morgan';
-
+require("dotenv").config();
+const port = process.env.PORT||3000;
 import * as config from 'config';
 
 let app;
 
 const { readdirSync, statSync } = require('fs')
 const { join } = require('path')
-const dirs = p => readdirSync(p).filter(f => statSync(join(p, f)).isDirectory())
+var dirs = p => readdirSync(p).filter(f => statSync(join(p, f)).isDirectory())
+var categories = dirs(path.join(__dirname, '..', 'uploads'))
 
 async function bootstrap() {
   app = express();
@@ -20,26 +22,55 @@ async function bootstrap() {
 
   // main route
   app.get('/', (req, res) => {
-
-    const links = config.get('routes').map((link) => {
-
-      const urls = dirs(path.join(__dirname, '..', 'uploads', link)).map((url) => {
-        app.use(express.static(path.join(__dirname, '..', 'uploads',link,url)));
-
-        return `
-        <td>
-        <div class="col-sm-12 ">
-          <div class="card col-sm-5">
-            <div class="card-body text-center">
-              <h5 class="card-title">
-                  ${link} - ${url}
-              </h5>
-              <a href="${link}/${url}" class="btn btn-primary">Report</a>
-            </div>
+    let types = dirs(path.join(__dirname, '..', 'uploads'))
+    const links = types.map((link) => {
+      return `
+      <div class="card text-white bg-success mb-3 col-sm-4 col-md-5" style="margin:auto" >
+        <div class="card-header text-center">${link}</div>
+        <div class="card-body">
+          <a href="${link}" class="btn-block btn btn-dark">Open</a>
+        </div>
+      </div>
+     `;
+    }).join('');
+    res.send(`
+  <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <base href="/">
+        <link rel="stylesheet" href="bootstrap.min.css">
+        <title>Test Reports Portal</title>
+      </head>
+      <body>
+        <div class="row">
+          <div class="col-xs-12 mx-auto">
+            <h1 class=" text-success">Test Reports Portal</h1>
           </div>
-        </div></td>`;
-      }).join('');
+        </div>
+        <div class="row" style="margin-bottom:20px">
+          ${links}
+        </div>
+      </body>
+    </html>
+`);
+  });
 
+
+
+  // set dynamic routes
+  await categories.forEach(category => {
+    app.use(`/${category}`, (req, res) => {
+      let reportNames = dirs(path.join(__dirname, '..', 'uploads', category));
+      let urls = reportNames.map((url) => {
+        app.use(express.static(path.join(__dirname, '..', 'uploads', category, url)));
+        return `
+      <tr>
+      <td>${url}</td>
+      <td><a href="${category}/${url}" class="btn btn-success">Open</a></td>
+      </tr>
+       `;
+      }).join('');
       res.send(`
     <!DOCTYPE html>
       <html>
@@ -47,35 +78,44 @@ async function bootstrap() {
           <meta charset="utf-8">
           <base href="/">
           <link rel="stylesheet" href="bootstrap.min.css">
+          <title>Test Reports Portal - ${category}</title>
         </head>
         <body>
           <div class="row">
             <div class="col-xs-12 mx-auto">
-              <h1>Automation Test Reports Portal</h1>
+              <h1 class=" text-success">Automation Test Reports Portal : ${category}</h1>
             </div>
           </div>
-          <div class="row">
+          <table class="table table-dark table-hover table-bordered col-sm-10" style="margin:auto">
+          <thead>
+            <tr>
+              <th class = "col-sm-8" scope="col">Name</th>
+              <th class = "col-sm-4" scope="col">Link</th>
+            </tr>
+          </thead>
+          <tbody>
+          
             ${urls}
-          </div>
+          
+          </tbody>
         </body>
       </html>
 `);
+    });
+
+
+    let reportNames = dirs(path.join(__dirname, '..', 'uploads', category));
+    reportNames.forEach(reportName => {
+      app.use(`/${category}/${reportName}`, (req, res) => {
+
+        res.sendFile(path.resolve(path.join(__dirname, '../uploads', `${category}/${reportName}/index.html`)));
+
+      });
     })
 
   });
+  
+await app.listen(port);}
 
-  // set dynamic routes
-  await config.get('routes').forEach(project => {
-
-    console.log(`project: ${project} loaded`);
-
-    app.use(`/${project}`, (req, res) => {
-      let name = require('url').parse(req.url, true).query.name;
-      res.sendFile(path.resolve(path.join(__dirname, '../uploads', `${project}/${name}/index.html`)));
-    });
-  });
-
-  await app.listen(config.get('port'));
-}
 
 bootstrap();
